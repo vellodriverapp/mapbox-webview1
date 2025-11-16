@@ -1,134 +1,194 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8" />
-<title>Uber Style Map</title>
-<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <meta charset="utf-8" />
+    <title>Uber Style Map</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
 
-<!-- Mapbox GL JS v1 (compatível com qualquer token) -->
-<link href="https://api.mapbox.com/mapbox-gl-js/v1.13.2/mapbox-gl.css" rel="stylesheet" />
-<script src="https://api.mapbox.com/mapbox-gl-js/v1.13.2/mapbox-gl.js"></script>
+    <!-- Mapbox GL JS v2 -->
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
 
-<style>
-    body, html { margin: 0; padding: 0; height: 100%; }
-    #map { width: 100%; height: 100vh; }
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
 
-    /* Estilo Uber: Popup preto e branco */
-    .uber-popup {
-        background: white;
-        padding: 10px 14px;
-        border-radius: 8px;
-        font-family: sans-serif;
-        font-size: 13px;
-        box-shadow: 0 3px 6px rgba(0,0,0,0.25);
-    }
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
 
-    .uber-time {
-        font-weight: bold;
-        color: black;
-        font-size: 14px;
-    }
+        /* Remove fundo branco padrão */
+        .mapboxgl-popup-content {
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
 
-    .uber-address {
-        margin-top: 4px;
-        color: #444;
-    }
+        /* Remove seta */
+        .mapboxgl-popup-tip {
+            display: none !important;
+        }
 
-    /* Remover caixa default do Mapbox */
-    .mapboxgl-popup-content {
-        background: transparent !important;
-        box-shadow: none !important;
-        padding: 0 !important;
-    }
+        /* Caixa branca simples estilo Uber */
+        .popup-box {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: sans-serif;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+        }
 
-    .mapboxgl-popup-tip {
-        display: none !important;
-    }
-</style>
+        .popup-sub {
+            font-size: 12px;
+            margin-top: 2px;
+            color: #333;
+        }
+
+        /* Caixa estilo Uber (preta + branca ao lado) */
+        .uber-popup {
+            background: white;
+            display: flex;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+            font-family: sans-serif;
+        }
+
+        .uber-time {
+            background: black;
+            color: white;
+            padding: 10px;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+        }
+
+        .uber-address {
+            padding: 10px;
+            font-size: 12px;
+            color: #333;
+        }
+    </style>
 </head>
 
 <body>
 <div id="map"></div>
 
 <script>
+    const urlParams = new URLSearchParams(window.location.search);
 
-// ===========================================
-// CONFIGURAÇÕES INICIAIS
-// ===========================================
+    const token = 'pk.eyJ1IjoidmVsbG9kcml2ZXIiLCJhIjoiY21iMGc2azhiMHcyNDJrcTJrN3F3dnp1bSJ9.A6iU7GA4IixnaTbhJPe9hQ';
 
-mapboxgl.accessToken = 'pk.eyJ1IjoidmVsbG9kcml2ZXIiLCJhIjoiY21iMGc2azhiMHcyNDJrcTJrN3F3dnp1bSJ9.A6iU7GA4IixnaTbhJPe9hQ';
+    const originLat = parseFloat(urlParams.get('originLat')) || -28.75946106765564;
+    const originLng = parseFloat(urlParams.get('originLng')) || -51.61631403193729;
 
-// Coordenadas de teste → (você pode substituir por query params)
-const origin = [-51.616314, -28.759461];
-const dest   = [-51.604392, -28.777384];
+    const destLat = parseFloat(urlParams.get('destLat')) || -28.777384741869867;
+    const destLng = parseFloat(urlParams.get('destLng')) || -51.60439293474322;
 
-// Estilo parecido com Uber: LIGHT
-const uberStyle = "mapbox://styles/mapbox/light-v10";
+    mapboxgl.accessToken = token;
 
-// Criar mapa no centro da origem
-const map = new mapboxgl.Map({
-    container: 'map',
-    style: uberStyle,
-    center: origin,
-    zoom: 13
-});
-
-// ===========================================
-// FUNÇÃO PARA DESENHAR ROTA (Uber Blue)
-// ===========================================
-
-async function drawRoute() {
-
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${dest[0]},${dest[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const route = data.routes[0].geometry.coordinates;
-    const durationMin = Math.round(data.routes[0].duration / 60);
-
-    // Adiciona linha da rota
-    map.addSource("route", {
-        type: "geojson",
-        data: {
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: route }
-        }
+    /* 
+      USANDO EXATAMENTE O ESTILO DO MAPA QUE FUNCIONOU ANTES
+      (mapbox/light-v10 → cor e layout idêntico ao Uber)
+    */
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: "mapbox://styles/mapbox/light-v10",
+        center: [originLng, originLat],
+        zoom: 13
     });
 
-    map.addLayer({
-        id: "route-line",
-        type: "line",
-        source: "route",
-        paint: {
-            "line-width": 5,
-            "line-color": "#0A3D62"   // Azul Uber
-        }
-    });
+    // ============================
+    // FUNÇÕES DE ENDEREÇO
+    // ============================
 
-    // Marcadores
-    new mapboxgl.Marker({ color: "black" }).setLngLat(origin).addTo(map);
-    new mapboxgl.Marker({ color: "black" }).setLngLat(dest).addTo(map);
+    function cleanAddress(raw) {
+        if (!raw) return "Endereço";
+        const parts = raw.split(",").map(p => p.trim());
+        return parts[0] && parts[1] ? `${parts[0]}, ${parts[1]}` : parts[0];
+    }
 
-    // Popup modelo Uber (somente destino)
-    new mapboxgl.Popup({ offset: 25, closeButton: false })
-        .setLngLat(dest)
-        .setHTML(`
-            <div class="uber-popup">
-                <div class="uber-time">${durationMin} min</div>
-                <div class="uber-address">Destino selecionado</div>
-            </div>
-        `)
-        .addTo(map);
+    async function getAddress(lat, lng) {
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        return cleanAddress(data.features[0]?.place_name);
+    }
 
-    // Ajustar zoom aos limites da rota
-    const bounds = new mapboxgl.LngLatBounds();
-    route.forEach(p => bounds.extend(p));
-    map.fitBounds(bounds, { padding: 60 });
-}
+    // ============================
+    // ROTA + POPUPS
+    // ============================
 
-map.on("load", drawRoute);
+    async function drawRoute() {
+        const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${originLng},${originLat};${destLng},${destLat}?geometries=geojson&overview=full&access_token=${token}`;
+        const res = await fetch(url);
+        const data = await res.json();
 
+        const route = data.routes[0].geometry.coordinates;
+        const durationMin = Math.round(data.routes[0].duration / 60);
+
+        // Rota azul estilo Uber
+        map.addSource("route", {
+            type: "geojson",
+            data: {
+                type: "Feature",
+                geometry: {
+                    type: "LineString",
+                    coordinates: route
+                }
+            }
+        });
+
+        map.addLayer({
+            id: "route-line",
+            type: "line",
+            source: "route",
+            paint: {
+                "line-width": 6,
+                "line-color": "#0A3D62"
+            }
+        });
+
+        // Marcadores
+        new mapboxgl.Marker({ color: "black" }).setLngLat([originLng, originLat]).addTo(map);
+        new mapboxgl.Marker({ color: "black" }).setLngLat([destLng, destLat]).addTo(map);
+
+        const originAddress = await getAddress(originLat, originLng);
+        const destAddress = await getAddress(destLat, destLng);
+
+        // Popup origem (caixa branca)
+        new mapboxgl.Popup({ offset: 30, closeButton: false })
+            .setLngLat([originLng, originLat])
+            .setHTML(`
+                <div class="popup-box">
+                    <div class="popup-sub">${originAddress}</div>
+                </div>
+            `)
+            .addTo(map);
+
+        // Popup destino estilo Uber (caixa dividida)
+        new mapboxgl.Popup({ offset: 30, closeButton: false })
+            .setLngLat([destLng, destLat])
+            .setHTML(`
+                <div class="uber-popup">
+                    <div class="uber-time">${durationMin} MIN</div>
+                    <div class="uber-address">${destAddress}</div>
+                </div>
+            `)
+            .addTo(map);
+
+        // Ajustar zoom e enquadramento
+        const bounds = new mapboxgl.LngLatBounds();
+        route.forEach(coord => bounds.extend(coord));
+        map.fitBounds(bounds, { padding: 80 });
+    }
+
+    map.on("load", drawRoute);
 </script>
 </body>
 </html>
