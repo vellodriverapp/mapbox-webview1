@@ -1,263 +1,134 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <title>Coletor de Localização - Mapbox</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
-  <style>
-    :root {
-      --accent: #0a3d62;
-      --bg: #ffffff;
-      --muted: #6b7280;
+<meta charset="utf-8" />
+<title>Uber Style Map</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+<!-- Mapbox GL JS v1 (compatível com qualquer token) -->
+<link href="https://api.mapbox.com/mapbox-gl-js/v1.13.2/mapbox-gl.css" rel="stylesheet" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.13.2/mapbox-gl.js"></script>
+
+<style>
+    body, html { margin: 0; padding: 0; height: 100%; }
+    #map { width: 100%; height: 100vh; }
+
+    /* Estilo Uber: Popup preto e branco */
+    .uber-popup {
+        background: white;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-family: sans-serif;
+        font-size: 13px;
+        box-shadow: 0 3px 6px rgba(0,0,0,0.25);
     }
-    html,body { height:100%; margin:0; font-family: Inter, Arial, sans-serif; background:var(--bg); color:#111827; }
-    #map { position:fixed; inset:0 0 120px 0; } /* leave space for bottom panel */
-    .panel {
-      position: fixed;
-      left: 12px;
-      right: 12px;
-      bottom: 12px;
-      height: 96px;
-      background: rgba(255,255,255,0.98);
-      border-radius: 12px;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
-      display:flex;
-      align-items:center;
-      gap:12px;
-      padding:12px;
-      z-index: 5;
+
+    .uber-time {
+        font-weight: bold;
+        color: black;
+        font-size: 14px;
     }
-    .coords {
-      flex:1;
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-      min-width: 0;
+
+    .uber-address {
+        margin-top: 4px;
+        color: #444;
     }
-    .coords .label { font-size:12px; color:var(--muted); }
-    .coords .value { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .buttons { display:flex; gap:8px; align-items:center; }
-    button {
-      background:var(--accent); color:white; border:0; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600;
+
+    /* Remover caixa default do Mapbox */
+    .mapboxgl-popup-content {
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
     }
-    button.ghost { background:transparent; color:var(--accent); box-shadow: inset 0 0 0 1px rgba(10,61,98,0.08); border:1px solid rgba(10,61,98,0.08); }
-    button.small { padding:6px 8px; font-size:13px; }
-    .status { position: fixed; left:12px; top:12px; background:rgba(255,255,255,0.95); padding:8px 10px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.06); font-size:13px; z-index:6; }
-    @media (min-width:900px) {
-      #map { inset:0 0 120px 0; }
-      .panel { left: 24px; right: auto; bottom: 24px; width: 420px; flex-direction:column; height:auto; padding:16px; }
-      .buttons { justify-content: flex-end; width:100%; }
+
+    .mapboxgl-popup-tip {
+        display: none !important;
     }
-  </style>
+</style>
 </head>
+
 <body>
-  <div id="map"></div>
+<div id="map"></div>
 
-  <div class="status" id="status">Aguardando permissão de localização...</div>
+<script>
 
-  <div class="panel" role="region" aria-label="Painel de localização">
-    <div class="coords">
-      <div class="label">Localização atual</div>
-      <div class="value" id="latlng">—</div>
-      <div style="font-size:12px; color:var(--muted)" id="accuracy">—</div>
-    </div>
+// ===========================================
+// CONFIGURAÇÕES INICIAIS
+// ===========================================
 
-    <div class="buttons" style="margin-left: auto;">
-      <button id="btnCenter" class="small ghost">Centralizar</button>
-      <button id="btnLock" class="small">Travar posição</button>
-      <button id="btnSend" class="small">Enviar (postMessage)</button>
-      <button id="btnCopy" class="small ghost">Copiar</button>
-    </div>
-  </div>
+mapboxgl.accessToken = 'pk.eyJ1IjoidmVsbG9kcml2ZXIiLCJhIjoiY21iMGc2azhiMHcyNDJrcTJrN3F3dnp1bSJ9.A6iU7GA4IixnaTbhJPe9hQ';
 
-  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
-  <script>
-    // ------- CONFIGURAÇÃO -------
-    mapboxgl.accessToken = 'pk.eyJ1IjoidmVsbG9kcml2ZXIiLCJhIjoiY21iMGc2azhiMHcyNDJrcTJrN3F3dnp1bSJ9.A6iU7GA4IixnaTbhJPe9hQ';
-    const DEFAULT_STYLE = 'mapbox://styles/mapbox/streets-v11';
-    const DEFAULT_ZOOM = 15;
+// Coordenadas de teste → (você pode substituir por query params)
+const origin = [-51.616314, -28.759461];
+const dest   = [-51.604392, -28.777384];
 
-    // ------- ELEMENTOS UI -------
-    const statusEl = document.getElementById('status');
-    const latlngEl = document.getElementById('latlng');
-    const accuracyEl = document.getElementById('accuracy');
-    const btnCenter = document.getElementById('btnCenter');
-    const btnLock = document.getElementById('btnLock');
-    const btnSend = document.getElementById('btnSend');
-    const btnCopy = document.getElementById('btnCopy');
+// Estilo parecido com Uber: LIGHT
+const uberStyle = "mapbox://styles/mapbox/light-v10";
 
-    // ------- MAPA -------
-    const map = new mapboxgl.Map({
-      container: 'map',
-      style: DEFAULT_STYLE,
-      center: [0,0],
-      zoom: 2,
-      attributionControl: true
+// Criar mapa no centro da origem
+const map = new mapboxgl.Map({
+    container: 'map',
+    style: uberStyle,
+    center: origin,
+    zoom: 13
+});
+
+// ===========================================
+// FUNÇÃO PARA DESENHAR ROTA (Uber Blue)
+// ===========================================
+
+async function drawRoute() {
+
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${dest[0]},${dest[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const route = data.routes[0].geometry.coordinates;
+    const durationMin = Math.round(data.routes[0].duration / 60);
+
+    // Adiciona linha da rota
+    map.addSource("route", {
+        type: "geojson",
+        data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: route }
+        }
     });
 
-    // resize quando necessário (em webviews o container pode mudar)
-    window.addEventListener('resize', () => map.resize());
-
-    // ------- MARKER ------- 
-    let marker = null;
-    let accuracyCircle = null;
-    let locked = false; // trava posição quando true
-    function createOrUpdateMarker(lng, lat, accuracy) {
-      const el = document.createElement('div');
-      el.style.width = '18px';
-      el.style.height = '18px';
-      el.style.borderRadius = '50%';
-      el.style.background = '#0a3d62';
-      el.style.boxShadow = '0 2px 6px rgba(10,61,98,0.4)';
-      el.style.border = '3px solid rgba(255,255,255,0.9)';
-
-      if (!marker) {
-        marker = new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(map);
-      } else {
-        marker.setLngLat([lng, lat]);
-      }
-
-      // accuracy circle: simple geojson source + layer update
-      if (!accuracyCircle) {
-        map.on('load', () => {});
-        accuracyCircle = {
-          id: 'accuracy-circle',
-          source: {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: []
-            }
-          }
-        };
-        // We'll add a layer when needed by directly using map.addSource & addLayer
-      }
-
-      // update textual UI
-      latlngEl.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-      accuracyEl.textContent = `Precisão (m): ${accuracy != null ? accuracy.toFixed(1) : '—'}`;
-
-      statusEl.textContent = 'Localização atualizada';
-    }
-
-    // ------- GEOLOCATION (watch) -------
-    let watchId = null;
-    function startWatching() {
-      if (!('geolocation' in navigator)) {
-        statusEl.textContent = 'Geolocalização não suportada no navegador';
-        return;
-      }
-
-      statusEl.textContent = 'Solicitando permissão de localização...';
-
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const acc = pos.coords.accuracy;
-
-          // atualiza marker se não travado
-          if (!locked) {
-            createOrUpdateMarker(lng, lat, acc);
-            map.flyTo({ center: [lng, lat], zoom: DEFAULT_ZOOM, speed: 0.9, curve: 1.5 });
-          } else {
-            statusEl.textContent = 'Posição travada';
-            // still update text so user sees new coords if desired:
-            latlngEl.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-            accuracyEl.textContent = `Precisão (m): ${acc != null ? acc.toFixed(1) : '—'}`;
-          }
-        },
-        (err) => {
-          console.error('Geolocation error', err);
-          if (err.code === 1) {
-            statusEl.textContent = 'Permissão negada. Habilite localização.';
-          } else if (err.code === 2) {
-            statusEl.textContent = 'Posição indisponível.';
-          } else if (err.code === 3) {
-            statusEl.textContent = 'Timeout de localização.';
-          } else {
-            statusEl.textContent = 'Erro ao obter localização.';
-          }
-        },
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
-      );
-    }
-
-    function stopWatching() {
-      if (watchId != null) navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-
-    // ------- BUTTONS -------
-    btnCenter.addEventListener('click', () => {
-      if (!marker) return;
-      const lngLat = marker.getLngLat();
-      map.flyTo({ center: [lngLat.lng, lngLat.lat], zoom: DEFAULT_ZOOM });
+    map.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "route",
+        paint: {
+            "line-width": 5,
+            "line-color": "#0A3D62"   // Azul Uber
+        }
     });
 
-    btnLock.addEventListener('click', () => {
-      locked = !locked;
-      btnLock.textContent = locked ? 'Destravar posição' : 'Travar posição';
-      btnLock.classList.toggle('ghost', !locked);
-      statusEl.textContent = locked ? 'Posição travada' : 'Acompanhando posição';
-    });
+    // Marcadores
+    new mapboxgl.Marker({ color: "black" }).setLngLat(origin).addTo(map);
+    new mapboxgl.Marker({ color: "black" }).setLngLat(dest).addTo(map);
 
-    btnCopy.addEventListener('click', async () => {
-      if (!marker) return alert('Nenhuma posição disponível ainda');
-      const p = marker.getLngLat();
-      const text = `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
-      try {
-        await navigator.clipboard.writeText(text);
-        statusEl.textContent = 'Coordenadas copiadas para a área de transferência';
-      } catch (e) {
-        console.warn('Clipboard failed', e);
-        prompt('Copie as coordenadas:', text);
-      }
-    });
+    // Popup modelo Uber (somente destino)
+    new mapboxgl.Popup({ offset: 25, closeButton: false })
+        .setLngLat(dest)
+        .setHTML(`
+            <div class="uber-popup">
+                <div class="uber-time">${durationMin} min</div>
+                <div class="uber-address">Destino selecionado</div>
+            </div>
+        `)
+        .addTo(map);
 
-    btnSend.addEventListener('click', () => {
-      if (!marker) return alert('Nenhuma posição disponível ainda');
-      const p = marker.getLngLat();
-      // Mensagem para app pai (WebView) — ideal para FlutterFlow receber via postMessage
-      const payload = {
-        type: 'mapboxLocation',
-        lat: parseFloat(p.lat.toFixed(6)),
-        lng: parseFloat(p.lng.toFixed(6)),
-        timestamp: Date.now()
-      };
-      // send to parent window (works in WebView and iframe). Apps nativos devem ouvir mensagem.
-      window.parent.postMessage(payload, '*');
-      statusEl.textContent = 'Coordenadas enviadas via postMessage';
-    });
+    // Ajustar zoom aos limites da rota
+    const bounds = new mapboxgl.LngLatBounds();
+    route.forEach(p => bounds.extend(p));
+    map.fitBounds(bounds, { padding: 60 });
+}
 
-    // ------- INITIALIZE -------
-    map.on('load', () => {
-      // if user denies, still show a nice default area (optional)
-      startWatching();
+map.on("load", drawRoute);
 
-      // Ensure map resizes properly inside webviews
-      setTimeout(() => map.resize(), 300);
-    });
-
-    // Safety: if map fails due to style issues or token, show error
-    map.on('error', (e) => {
-      console.error('Map error', e.error || e);
-      statusEl.textContent = 'Erro ao carregar o mapa. Verifique seu token/estilo Mapbox.';
-    });
-
-    // For debugging in browser console: listen to postMessages from parent
-    window.addEventListener('message', (ev) => {
-      // ignore cross origin security here for demo; apps can validate ev.origin
-      console.log('message from parent', ev.data);
-    });
-
-    // OPTIONAL: expose a global to get current coords via console
-    window._mapbox_getCurrent = () => {
-      if (!marker) return null;
-      const p = marker.getLngLat();
-      return { lat: p.lat, lng: p.lng };
-    };
-  </script>
+</script>
 </body>
 </html>
